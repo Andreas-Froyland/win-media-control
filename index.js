@@ -56,8 +56,9 @@ export async function listSessions() {
     }
     
     Function Get-ProcessName($appId) {
+      $appIdClean = $appId -replace '\\.exe$', '';
+      
       try {
-        $appIdClean = $appId -replace '\\.exe$', '';
         $processes = Get-Process -Name $appIdClean -ErrorAction SilentlyContinue;
         if ($processes) {
           $proc = $processes[0];
@@ -69,7 +70,7 @@ export async function listSessions() {
       } catch {}
       
       if ($appId -match '\\.exe$') {
-        return $appId -replace '\\.exe$', '';
+        return $appIdClean;
       }
       
       try {
@@ -80,19 +81,14 @@ export async function listSessions() {
       } catch {}
       
       if ($appId -notmatch '\\.exe$') {
-        $browserMap = @{
-          'firefox' = 'Firefox';
-          'chrome' = 'Google Chrome';
-          'msedge' = 'Microsoft Edge';
-          'opera' = 'Opera';
-          'brave' = 'Brave';
-        };
-        
-        foreach ($browser in $browserMap.Keys) {
-          $proc = Get-Process -Name $browser -ErrorAction SilentlyContinue | Select-Object -First 1;
-          if ($proc) {
-            return \"$($browserMap[$browser]) (Tab)\";
-          }
+        $firefoxProc = Get-Process -Name firefox -ErrorAction SilentlyContinue | Select-Object -First 1;
+        if ($firefoxProc) {
+          try {
+            if ($firefoxProc.MainModule.FileVersionInfo.FileDescription) {
+              return $firefoxProc.MainModule.FileVersionInfo.FileDescription;
+            }
+          } catch {}
+          return \"Firefox\";
         }
       }
       

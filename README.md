@@ -4,13 +4,13 @@ Control Windows media playback programmatically using PowerShell commands. Works
 
 ## Features
 
-- 🎵 **Control any media app** - Works with Spotify, browsers, media players, etc.
-- 🚀 **Simple async/await API** - Modern Promise-based interface
-- 📦 **Zero dependencies** - Uses built-in Node.js modules
-- 🔧 **TypeScript support** - Full type definitions included
-- 🖥️ **CLI tool included** - Control media from command line
-- 🐛 **Debug mode** - Verbose logging for troubleshooting
-- ⚠️ **Smart error handling** - Warns on failures but continues with other apps
+- **Control any media app** - Works with Spotify, browsers, media players, etc.
+- **Simple async/await API** - Modern Promise-based interface
+- **Zero dependencies** - Uses built-in Node.js modules
+- **TypeScript support** - Full type definitions included
+- **CLI tool included** - Control media from command line
+- **Debug mode** - Verbose logging for troubleshooting
+- **Smart error handling** - Warns on failures but continues with other apps
 
 ## Requirements
 
@@ -57,7 +57,7 @@ console.log(sessions);
 // ]
 ```
 
-**Note:** Browser tabs (Firefox, Chrome, Edge) are automatically detected and labeled as "Browser Name (Tab)". The package intelligently identifies which browser is playing media even when Windows assigns cryptic session IDs to individual tabs.
+**Note:** The package uses the same approach as Windows' media overlay - it retrieves the **FileDescription** from the running process. Firefox tabs are automatically detected even when Windows assigns cryptic session IDs.
 
 ### Play Media
 
@@ -70,15 +70,16 @@ await play('Spotify');
 // Multiple apps (array)
 await play(['Spotify', 'Firefox']);
 
-// Browser tabs are automatically detected
-await play('Firefox');  // Controls Firefox tab playing media
-await play('Chrome');   // Controls Chrome tab playing media
+// All browsers show friendly names
+await play('Firefox');        // Controls Firefox
+await play('Google Chrome');  // Controls Chrome
+await play('Microsoft Edge'); // Controls Edge
 
 // Returns result object
 const result = await play(['Spotify', 'Chrome']);
 console.log(result);
 // {
-//   success: ['Spotify', 'Google Chrome (Tab)'],
+//   success: ['Spotify', 'Google Chrome'],
 //   failed: []
 // }
 ```
@@ -255,8 +256,25 @@ This package uses Windows' **System Media Transport Controls** (SMTC) through Po
 
 **Supported apps include:**
 - **Desktop apps:** Spotify, VLC Media Player, Windows Media Player, iTunes
-- **Browsers:** Chrome, Firefox, Edge, Opera, Brave (automatically detects browser tabs playing media)
-- **And many more!** Any app that integrates with Windows Media Transport Controls
+- **Browsers:** Chrome, Firefox, Edge, Opera, Brave (displays as "Google Chrome", "Firefox", "Microsoft Edge", etc.)
+- **Any app** that integrates with Windows Media Transport Controls
+
+The package uses the same name resolution as Windows' built-in media overlay.
+
+### Why Firefox Needs Special Handling
+
+Firefox generates dynamic session IDs (like `308046B0AF4A39CB`) for browser tabs playing media, rather than using a standard Windows Application User Model ID (AUMID). This is different from Chrome and Edge, which properly register their session IDs (`Chrome`, `MSEdge`).
+
+When we detect a cryptic session ID that doesn't match any running process, we check if Firefox is running and label it accordingly.
+
+### Found an App That Doesn't Work?
+
+If you encounter an application that doesn't appear in the session list or can't be controlled, please [create an issue](https://github.com/YOUR_USERNAME/win-media-control/issues) with:
+- The app name and version
+- What shows up when you run `npx win-media-control list`
+- Whether the app works with Windows' built-in media controls (media keys/overlay)
+
+This helps us improve detection for apps with non-standard session IDs!
 
 ## Common Issues
 
@@ -292,6 +310,3 @@ MIT
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## Author
-
-Created with ❤️ for Windows media control automation
