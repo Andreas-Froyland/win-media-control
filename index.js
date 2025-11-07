@@ -153,9 +153,24 @@ export async function listSessions() {
 }
 
 /**
- * Control media playback for specific apps
+ * Control media playback for specific apps or all apps
  */
 async function controlMedia(apps, action) {
+  // If apps is undefined, control all sessions
+  if (apps === undefined) {
+    const sessions = await listSessions();
+    
+    if (sessions.length === 0) {
+      console.warn('Warning: No active media sessions found');
+      return { success: [], failed: [] };
+    }
+    
+    const appNames = sessions.map(s => s.appName);
+    debug(`${action} all sessions:`, appNames);
+    
+    return controlMedia(appNames, action);
+  }
+  
   // Normalize input to array
   const appList = Array.isArray(apps) ? apps : [apps];
   
@@ -239,8 +254,8 @@ async function controlMedia(apps, action) {
 }
 
 /**
- * Play media for specified app(s)
- * @param {string|string[]} apps - App name or array of app names
+ * Play media for specified app(s) or all active sessions
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls all active sessions.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function play(apps) {
@@ -248,8 +263,8 @@ export async function play(apps) {
 }
 
 /**
- * Pause media for specified app(s)
- * @param {string|string[]} apps - App name or array of app names
+ * Pause media for specified app(s) or all active sessions
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls all active sessions.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function pause(apps) {
@@ -257,38 +272,86 @@ export async function pause(apps) {
 }
 
 /**
- * Play all active media sessions
+ * Skip to next track for specified app(s) or simulate media keyboard key
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Next Track keyboard key.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
-export async function globalPlay() {
-  const sessions = await listSessions();
-  
-  if (sessions.length === 0) {
-    console.warn('Warning: No active media sessions found');
-    return { success: [], failed: [] };
+export async function next(apps) {
+  if (apps === undefined) {
+    return simulateMediaKey('Next Track', 0xB0);
   }
-  
-  const appNames = sessions.map(s => s.appName);
-  debug('Global play for all sessions:', appNames);
-  
-  return controlMedia(appNames, 'Play');
+  return controlMedia(apps, 'SkipNext');
 }
 
 /**
- * Pause all active media sessions
+ * Skip to previous track for specified app(s) or simulate media keyboard key
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Previous Track keyboard key.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
-export async function globalPause() {
-  const sessions = await listSessions();
-  
-  if (sessions.length === 0) {
-    console.warn('Warning: No active media sessions found');
-    return { success: [], failed: [] };
+export async function previous(apps) {
+  if (apps === undefined) {
+    return simulateMediaKey('Previous Track', 0xB1);
   }
-  
-  const appNames = sessions.map(s => s.appName);
-  debug('Global pause for all sessions:', appNames);
-  
-  return controlMedia(appNames, 'Pause');
+  return controlMedia(apps, 'SkipPrevious');
 }
+
+/**
+ * Stop playback for specified app(s) or simulate media keyboard key
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Stop keyboard key.
+ * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
+ */
+export async function stop(apps) {
+  if (apps === undefined) {
+    return simulateMediaKey('Stop', 0xB2);
+  }
+  return controlMedia(apps, 'Stop');
+}
+
+/**
+ * Toggle play/pause for specified app(s) or simulate media keyboard key
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Play/Pause Toggle keyboard key.
+ * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
+ */
+export async function togglePlayPause(apps) {
+  if (apps === undefined) {
+    return simulateMediaKey('Play/Pause Toggle', 0xB3);
+  }
+  return controlMedia(apps, 'TogglePlayPause');
+}
+
+/**
+ * Simulate media key press via PowerShell
+ */
+async function simulateMediaKey(keyName, keyCode) {
+  debug(`Simulating ${keyName} media key press`);
+  
+  const script = `
+    Add-Type -TypeDefinition @"
+    using System.Runtime.InteropServices;
+    public class MediaControl {
+      [DllImport("user32.dll")]
+      private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, System.UIntPtr dwExtraInfo);
+      
+      private const uint KEYEVENTF_EXTENDEDKEY = 0x1;
+      private const uint KEYEVENTF_KEYUP = 0x2;
+      
+      public static void PressKey(byte vkCode) {
+        keybd_event(vkCode, 0, KEYEVENTF_EXTENDEDKEY, System.UIntPtr.Zero);
+        keybd_event(vkCode, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, System.UIntPtr.Zero);
+      }
+    }
+"@ -Language CSharp
+    
+    [MediaControl]::PressKey(${keyCode})
+  `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+  
+  try {
+    await executePowerShell(script);
+    return { success: [keyName], failed: [] };
+  } catch (error) {
+    debug(`Failed to simulate ${keyName} key:`, error.message);
+    return { success: [], failed: [{ app: 'MediaKey', reason: error.message }] };
+  }
+}
+
 

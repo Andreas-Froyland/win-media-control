@@ -15,7 +15,7 @@ Requires Windows 10/11 and Node.js 14+.
 ## Usage
 
 ```javascript
-import { play, pause, globalPlay, globalPause, listSessions } from 'win-media-control';
+import { play, pause, next, previous, stop, togglePlayPause, listSessions } from 'win-media-control';
 ```
 
 ### List active sessions
@@ -47,16 +47,34 @@ Firefox tabs are automatically detected even when they use cryptic session IDs.
 ### Control playback
 
 ```javascript
+// Control specific apps
 await play('Spotify');
 await pause('Firefox');
+await stop('Chrome');
+
+// Track navigation
+await next('Spotify');
+await previous('Spotify');
+
+// Toggle play/pause
+await togglePlayPause('Firefox');
 
 // Multiple apps
 await play(['Spotify', 'Firefox']);
+await next(['Spotify', 'Chrome']);
 
-// All active sessions
-await globalPlay();
-await globalPause();
+// Omit app parameter to control all sessions or simulate keyboard keys
+await play();         // Play all active sessions
+await pause();        // Pause all active sessions
+await next();         // Simulate Next Track keyboard key (Windows decides which session)
+await previous();     // Simulate Previous Track keyboard key
+await stop();         // Simulate Stop keyboard key
+await togglePlayPause(); // Simulate Play/Pause Toggle keyboard key
 ```
+
+When you call `next()`, `previous()`, `stop()`, or `togglePlayPause()` without arguments, they simulate pressing media keyboard keys. Windows decides which session to control (typically the most recently active one). This matches the behavior of physical multimedia keyboards.
+
+When you call `play()` or `pause()` without arguments, they control all active sessions.
 
 Functions return a result object with `success` and `failed` arrays:
 
@@ -72,9 +90,16 @@ console.log(result);
 ## CLI
 
 ```bash
+# Control specific apps
 npx win-media-control play Spotify
 npx win-media-control pause Firefox Chrome
-npx win-media-control globalPause
+npx win-media-control next Spotify
+
+# Control all sessions (play/pause) or simulate keyboard keys (next/previous/stop/toggle)
+npx win-media-control pause
+npx win-media-control next
+npx win-media-control toggle
+
 npx win-media-control list
 ```
 
@@ -82,6 +107,7 @@ Install globally to drop the `npx`:
 
 ```bash
 npm install -g win-media-control
+win-media-control next
 win-media-control pause Spotify
 ```
 
@@ -99,10 +125,15 @@ node your-script.js
 Type definitions are included:
 
 ```typescript
-import { MediaSession, ControlResult } from 'win-media-control';
+import { MediaSession, ControlResult, next } from 'win-media-control';
 
 const sessions: MediaSession[] = await listSessions();
-const result: ControlResult = await play('Spotify');
+
+// Control specific app
+const result: ControlResult = await next('Spotify');
+
+// Simulate keyboard key
+await next();
 ```
 
 ## How it works
@@ -129,6 +160,22 @@ If an app doesn't work, open an issue with the app name and what `npx win-media-
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
+
+## Coming Later
+
+These features could be added if there's interest:
+
+- Seek/scrub to specific position
+- Fast forward/rewind
+- Playback rate adjustment
+- Shuffle toggle
+- Repeat mode control
+- Volume control
+- Get current position/duration
+- Album art retrieval
+- Timeline properties
+
+Open an issue if you'd like any of these features.
 
 ## License
 

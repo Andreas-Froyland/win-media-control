@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { play, pause, globalPlay, globalPause, listSessions } from '../index.js';
+import { play, pause, next, previous, stop, togglePlayPause, listSessions } from '../index.js';
 
 // ANSI color codes for terminal output
 const colors = {
@@ -24,10 +24,12 @@ ${colors.cyan}USAGE:${colors.reset}
   win-media-control <command> [apps...]
 
 ${colors.cyan}COMMANDS:${colors.reset}
-  ${colors.green}play <app1> [app2...]${colors.reset}     Play media for specified app(s)
-  ${colors.green}pause <app1> [app2...]${colors.reset}    Pause media for specified app(s)
-  ${colors.green}globalPlay${colors.reset}                Play all active media sessions
-  ${colors.green}globalPause${colors.reset}               Pause all active media sessions
+  ${colors.green}play [app1] [app2...]${colors.reset}     Play media for app(s), or all if no app specified
+  ${colors.green}pause [app1] [app2...]${colors.reset}    Pause media for app(s), or all if no app specified
+  ${colors.green}next [app1] [app2...]${colors.reset}     Skip next for app(s), or simulate key if no app
+  ${colors.green}previous [app1] [app2...]${colors.reset} Skip previous for app(s), or simulate key if no app
+  ${colors.green}stop [app1] [app2...]${colors.reset}     Stop playback for app(s), or simulate key if no app
+  ${colors.green}toggle [app1] [app2...]${colors.reset}   Toggle play/pause for app(s), or simulate key if no app
   ${colors.green}list${colors.reset}                      List all active media sessions
 
 ${colors.cyan}OPTIONS:${colors.reset}
@@ -38,11 +40,14 @@ ${colors.cyan}EXAMPLES:${colors.reset}
   ${colors.gray}# Pause Spotify${colors.reset}
   win-media-control pause Spotify
 
+  ${colors.gray}# Skip to next track (simulate keyboard key)${colors.reset}
+  win-media-control next
+
   ${colors.gray}# Play multiple apps${colors.reset}
   win-media-control play Spotify Firefox
 
-  ${colors.gray}# Pause all media${colors.reset}
-  win-media-control globalPause
+  ${colors.gray}# Pause all sessions${colors.reset}
+  win-media-control pause
 
   ${colors.gray}# List active sessions${colors.reset}
   win-media-control list
@@ -132,58 +137,78 @@ async function main() {
     switch (command) {
       case 'play': {
         if (apps.length === 0) {
-          console.error(`${colors.red}Error: Please specify at least one app name${colors.reset}`);
-          console.log(`${colors.gray}Usage: win-media-control play <app1> [app2...]${colors.reset}`);
-          process.exit(1);
-        }
-        console.log(`${colors.cyan}Playing media for:${colors.reset} ${apps.join(', ')}`);
-        const result = await play(apps);
-        displayResult(result);
-        
-        // Exit with error code if all failed
-        if (result.failed.length > 0 && result.success.length === 0) {
-          process.exit(1);
+          console.log(`${colors.cyan}Playing all media sessions...${colors.reset}`);
+          const result = await play();
+          displayResult(result);
+        } else {
+          console.log(`${colors.cyan}Playing media for:${colors.reset} ${apps.join(', ')}`);
+          const result = await play(apps);
+          displayResult(result);
         }
         break;
       }
       
       case 'pause': {
         if (apps.length === 0) {
-          console.error(`${colors.red}Error: Please specify at least one app name${colors.reset}`);
-          console.log(`${colors.gray}Usage: win-media-control pause <app1> [app2...]${colors.reset}`);
-          process.exit(1);
-        }
-        console.log(`${colors.cyan}Pausing media for:${colors.reset} ${apps.join(', ')}`);
-        const result = await pause(apps);
-        displayResult(result);
-        
-        // Exit with error code if all failed
-        if (result.failed.length > 0 && result.success.length === 0) {
-          process.exit(1);
+          console.log(`${colors.cyan}Pausing all media sessions...${colors.reset}`);
+          const result = await pause();
+          displayResult(result);
+        } else {
+          console.log(`${colors.cyan}Pausing media for:${colors.reset} ${apps.join(', ')}`);
+          const result = await pause(apps);
+          displayResult(result);
         }
         break;
       }
       
-      case 'globalplay': {
-        console.log(`${colors.cyan}Playing all media sessions...${colors.reset}`);
-        const result = await globalPlay();
-        displayResult(result);
-        
-        // Exit with error code if all failed
-        if (result.failed.length > 0 && result.success.length === 0) {
-          process.exit(1);
+      case 'next': {
+        if (apps.length === 0) {
+          console.log(`${colors.cyan}Simulating Next Track key press...${colors.reset}`);
+          const result = await next();
+          displayResult(result);
+        } else {
+          console.log(`${colors.cyan}Skipping to next track for:${colors.reset} ${apps.join(', ')}`);
+          const result = await next(apps);
+          displayResult(result);
         }
         break;
       }
       
-      case 'globalpause': {
-        console.log(`${colors.cyan}Pausing all media sessions...${colors.reset}`);
-        const result = await globalPause();
-        displayResult(result);
-        
-        // Exit with error code if all failed
-        if (result.failed.length > 0 && result.success.length === 0) {
-          process.exit(1);
+      case 'previous': {
+        if (apps.length === 0) {
+          console.log(`${colors.cyan}Simulating Previous Track key press...${colors.reset}`);
+          const result = await previous();
+          displayResult(result);
+        } else {
+          console.log(`${colors.cyan}Skipping to previous track for:${colors.reset} ${apps.join(', ')}`);
+          const result = await previous(apps);
+          displayResult(result);
+        }
+        break;
+      }
+      
+      case 'stop': {
+        if (apps.length === 0) {
+          console.log(`${colors.cyan}Simulating Stop key press...${colors.reset}`);
+          const result = await stop();
+          displayResult(result);
+        } else {
+          console.log(`${colors.cyan}Stopping playback for:${colors.reset} ${apps.join(', ')}`);
+          const result = await stop(apps);
+          displayResult(result);
+        }
+        break;
+      }
+      
+      case 'toggle': {
+        if (apps.length === 0) {
+          console.log(`${colors.cyan}Simulating Play/Pause Toggle key press...${colors.reset}`);
+          const result = await togglePlayPause();
+          displayResult(result);
+        } else {
+          console.log(`${colors.cyan}Toggling play/pause for:${colors.reset} ${apps.join(', ')}`);
+          const result = await togglePlayPause(apps);
+          displayResult(result);
         }
         break;
       }
