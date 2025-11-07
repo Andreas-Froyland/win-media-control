@@ -2,8 +2,10 @@
  * Represents an active media session
  */
 export interface MediaSession {
-  /** The application's user model ID (e.g., 'Spotify.exe', 'Firefox.exe') */
+  /** The friendly application name (e.g., 'Spotify', 'Mozilla Firefox', 'Google Chrome') */
   appName: string;
+  /** The application's source ID from Windows (package ID or exe name) */
+  appId: string;
   /** The title of the currently playing media */
   title: string;
   /** The artist of the currently playing media */

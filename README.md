@@ -41,19 +41,23 @@ console.log(sessions);
 // Output:
 // [
 //   {
-//     appName: 'Spotify.exe',
+//     appName: 'Spotify',           // Friendly name
+//     appId: 'Spotify.exe',          // Windows source ID  
 //     title: 'Song Title',
 //     artist: 'Artist Name',
 //     playbackStatus: 'Playing'
 //   },
 //   {
-//     appName: 'firefox.exe',
+//     appName: 'Mozilla Firefox',
+//     appId: 'firefox.exe',
 //     title: 'Video Title',
 //     artist: '',
 //     playbackStatus: 'Paused'
 //   }
 // ]
 ```
+
+**Note:** Browser tabs (Firefox, Chrome, Edge) are automatically detected and labeled as "Browser Name (Tab)". The package intelligently identifies which browser is playing media even when Windows assigns cryptic session IDs to individual tabs.
 
 ### Play Media
 
@@ -66,12 +70,16 @@ await play('Spotify');
 // Multiple apps (array)
 await play(['Spotify', 'Firefox']);
 
+// Browser tabs are automatically detected
+await play('Firefox');  // Controls Firefox tab playing media
+await play('Chrome');   // Controls Chrome tab playing media
+
 // Returns result object
 const result = await play(['Spotify', 'Chrome']);
 console.log(result);
 // {
-//   success: ['Spotify.exe'],
-//   failed: [{ app: 'Chrome', reason: 'Session not found' }]
+//   success: ['Spotify', 'Google Chrome (Tab)'],
+//   failed: []
 // }
 ```
 
@@ -246,12 +254,9 @@ interface ControlResult {
 This package uses Windows' **System Media Transport Controls** (SMTC) through PowerShell and the Windows Runtime APIs. Any app that integrates with Windows' media controls (the popup that appears when you press media keys) can be controlled.
 
 **Supported apps include:**
-- Spotify
-- Chrome, Firefox, Edge (for web media)
-- VLC Media Player
-- Windows Media Player
-- iTunes
-- And many more!
+- **Desktop apps:** Spotify, VLC Media Player, Windows Media Player, iTunes
+- **Browsers:** Chrome, Firefox, Edge, Opera, Brave (automatically detects browser tabs playing media)
+- **And many more!** Any app that integrates with Windows Media Transport Controls
 
 ## Common Issues
 

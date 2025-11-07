@@ -55,6 +55,50 @@ export async function listSessions() {
       $netTask.Result;
     }
     
+    Function Get-ProcessName($appId) {
+      try {
+        $appIdClean = $appId -replace '\\.exe$', '';
+        $processes = Get-Process -Name $appIdClean -ErrorAction SilentlyContinue;
+        if ($processes) {
+          $proc = $processes[0];
+          if ($proc.MainModule.FileVersionInfo.FileDescription) {
+            return $proc.MainModule.FileVersionInfo.FileDescription;
+          }
+          return $proc.ProcessName;
+        }
+      } catch {}
+      
+      if ($appId -match '\\.exe$') {
+        return $appId -replace '\\.exe$', '';
+      }
+      
+      try {
+        $package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -like "*$appId*" -or $_.Name -like "*$appId*" } | Select-Object -First 1;
+        if ($package -and $package.Name) {
+          return $package.Name;
+        }
+      } catch {}
+      
+      if ($appId -notmatch '\\.exe$') {
+        $browserMap = @{
+          'firefox' = 'Firefox';
+          'chrome' = 'Google Chrome';
+          'msedge' = 'Microsoft Edge';
+          'opera' = 'Opera';
+          'brave' = 'Brave';
+        };
+        
+        foreach ($browser in $browserMap.Keys) {
+          $proc = Get-Process -Name $browser -ErrorAction SilentlyContinue | Select-Object -First 1;
+          if ($proc) {
+            return \"$($browserMap[$browser]) (Tab)\";
+          }
+        }
+      }
+      
+      return $appId;
+    }
+    
     [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media,ContentType=WindowsRuntime] | Out-Null;
     $sessionManager = AwaitAction([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync());
     $sessions = $sessionManager.GetSessions();
@@ -62,9 +106,12 @@ export async function listSessions() {
     $results = @();
     foreach ($session in $sessions) {
       $playback = $session.GetPlaybackInfo();
+      $appId = $session.SourceAppUserModelId;
+      $friendlyName = Get-ProcessName $appId;
       
       $result = @{
-        appName = $session.SourceAppUserModelId;
+        appName = $friendlyName;
+        appId = $appId;
         title = '';
         artist = '';
         playbackStatus = $playback.PlaybackStatus.ToString();
@@ -135,9 +182,10 @@ async function controlMedia(apps, action) {
   }
   
   for (const app of appList) {
-    // Find matching session (case-insensitive partial match)
+    // Find matching session (case-insensitive partial match against both friendly name and appId)
     const matchingSession = sessions.find(session => 
-      session.appName.toLowerCase().includes(app.toLowerCase())
+      session.appName.toLowerCase().includes(app.toLowerCase()) ||
+      session.appId.toLowerCase().includes(app.toLowerCase())
     );
     
     if (!matchingSession) {
@@ -147,6 +195,9 @@ async function controlMedia(apps, action) {
     }
     
     try {
+      // Use the actual appId for the PowerShell command
+      const targetAppId = matchingSession.appId;
+      
       const script = `
         Add-Type -AssemblyName System.Runtime.WindowsRuntime;
         $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.ToString() -eq 'System.Threading.Tasks.Task\`1[TResult] AsTask[TResult](Windows.Foundation.IAsyncOperation\`1[TResult])' })[0];
@@ -170,7 +221,7 @@ async function controlMedia(apps, action) {
         $sessions = $sessionManager.GetSessions();
         
         foreach ($session in $sessions) {
-          if ($session.SourceAppUserModelId -like "*${app}*") {
+          if ($session.SourceAppUserModelId -eq "${targetAppId}") {
             $actionTask = $session.Try${action}Async();
             AwaitBool $actionTask | Out-Null;
             Write-Output "Success";
@@ -180,8 +231,8 @@ async function controlMedia(apps, action) {
       `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
       
       await executePowerShell(script);
-      debug(`Successfully ${action.toLowerCase()}ed:`, app);
-      result.success.push(app);
+      debug(`Successfully ${action.toLowerCase()}ed:`, matchingSession.appName);
+      result.success.push(matchingSession.appName);
     } catch (error) {
       console.warn(`Warning: Failed to ${action.toLowerCase()} "${app}": ${error.message}`);
       result.failed.push({ app, reason: error.message });
