@@ -1,21 +1,8 @@
 # win-media-control
 
-Control Windows media playback programmatically using PowerShell commands. Works with any app that supports Windows' System Media Transport Controls (Spotify, Chrome, Firefox, Edge, VLC, and more).
+Node.js package for controlling Windows media playback. Works with Spotify, browsers (Chrome, Firefox, Edge), and any other app that integrates with Windows media controls.
 
-## Features
-
-- **Control any media app** - Works with Spotify, browsers, media players, etc.
-- **Simple async/await API** - Modern Promise-based interface
-- **Zero dependencies** - Uses built-in Node.js modules
-- **TypeScript support** - Full type definitions included
-- **CLI tool included** - Control media from command line
-- **Debug mode** - Verbose logging for troubleshooting
-- **Smart error handling** - Warns on failures but continues with other apps
-
-## Requirements
-
-- **Windows 10/11** - Uses Windows Runtime APIs
-- **Node.js 14+** - ES6 module support required
+Uses PowerShell to interact with Windows' System Media Transport Controls API.
 
 ## Installation
 
@@ -23,17 +10,15 @@ Control Windows media playback programmatically using PowerShell commands. Works
 npm install win-media-control
 ```
 
-## API Usage
+Requires Windows 10/11 and Node.js 14+.
 
-### Import
+## Usage
 
 ```javascript
 import { play, pause, globalPlay, globalPause, listSessions } from 'win-media-control';
 ```
 
-### List Active Media Sessions
-
-Get all active media sessions with their current state:
+### List active sessions
 
 ```javascript
 const sessions = await listSessions();
@@ -57,247 +42,90 @@ console.log(sessions);
 // ]
 ```
 
-**Note:** The package uses the same approach as Windows' media overlay - it retrieves the **FileDescription** from the running process. Firefox tabs are automatically detected even when Windows assigns cryptic session IDs.
+Firefox tabs are automatically detected even when they use cryptic session IDs.
 
-### Play Media
-
-Play media for specific app(s):
+### Control playback
 
 ```javascript
-// Single app (string)
 await play('Spotify');
-
-// Multiple apps (array)
-await play(['Spotify', 'Firefox']);
-
-// All browsers show friendly names
-await play('Firefox');        // Controls Firefox
-await play('Google Chrome');  // Controls Chrome
-await play('Microsoft Edge'); // Controls Edge
-
-// Returns result object
-const result = await play(['Spotify', 'Chrome']);
-console.log(result);
-// {
-//   success: ['Spotify', 'Google Chrome'],
-//   failed: []
-// }
-```
-
-### Pause Media
-
-Pause media for specific app(s):
-
-```javascript
-// Single app
-await pause('Spotify');
+await pause('Firefox');
 
 // Multiple apps
-await pause(['Spotify', 'Firefox', 'Chrome']);
-```
+await play(['Spotify', 'Firefox']);
 
-### Global Controls
-
-Control all active media sessions at once:
-
-```javascript
-// Play all media
+// All active sessions
 await globalPlay();
-
-// Pause all media
 await globalPause();
 ```
 
-### Complete Example
+Functions return a result object with `success` and `failed` arrays:
 
 ```javascript
-import { listSessions, play, pause, globalPause } from 'win-media-control';
-
-async function main() {
-  // List what's currently playing
-  const sessions = await listSessions();
-  console.log('Active sessions:', sessions);
-
-  // Pause all media
-  await globalPause();
-
-  // Wait a bit
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Resume Spotify only
-  await play('Spotify');
-}
-
-main();
-```
-
-## CLI Usage
-
-The package includes a command-line tool for quick media control:
-
-### Commands
-
-```bash
-# Play specific app(s)
-npx win-media-control play Spotify
-npx win-media-control play Spotify Firefox Chrome
-
-# Pause specific app(s)
-npx win-media-control pause Spotify
-npx win-media-control pause Firefox Chrome
-
-# Control all media sessions
-npx win-media-control globalPlay
-npx win-media-control globalPause
-
-# List active media sessions
-npx win-media-control list
-
-# Show help
-npx win-media-control --help
-
-# Show version
-npx win-media-control --version
-```
-
-### Global Installation
-
-For easier access, install globally:
-
-```bash
-npm install -g win-media-control
-
-# Now use without npx
-win-media-control pause Spotify
-win-media-control list
-```
-
-## Debug Mode
-
-Enable verbose logging to troubleshoot issues:
-
-```bash
-# On Windows (PowerShell)
-$env:DEBUG="win-media-control"
-node your-script.js
-
-# On Windows (CMD)
-set DEBUG=win-media-control
-node your-script.js
-
-# Or inline with the CLI
-DEBUG=win-media-control npx win-media-control pause Spotify
-```
-
-Debug mode shows:
-- PowerShell commands being executed
-- Found media sessions
-- Success/failure details for each operation
-
-## Error Handling
-
-The library uses a **warn-and-continue** approach:
-
-- If an app isn't found, it logs a warning and continues with other apps
-- Returns a result object with `success` and `failed` arrays
-- Never throws errors for missing apps (only for critical failures)
-
-```javascript
-const result = await pause(['Spotify', 'NonExistentApp', 'Firefox']);
-// Console output:
-// Warning: No media session found for "NonExistentApp". Available apps: Spotify.exe, firefox.exe
-
+const result = await pause(['Spotify', 'NonExistentApp']);
 console.log(result);
 // {
-//   success: ['Spotify.exe', 'firefox.exe'],
+//   success: ['Spotify'],
 //   failed: [{ app: 'NonExistentApp', reason: 'Session not found' }]
 // }
 ```
 
+## CLI
+
+```bash
+npx win-media-control play Spotify
+npx win-media-control pause Firefox Chrome
+npx win-media-control globalPause
+npx win-media-control list
+```
+
+Install globally to drop the `npx`:
+
+```bash
+npm install -g win-media-control
+win-media-control pause Spotify
+```
+
+## Debug
+
+Set `DEBUG=win-media-control` to see what PowerShell commands are being run:
+
+```bash
+$env:DEBUG="win-media-control"
+node your-script.js
+```
+
 ## TypeScript
 
-Full TypeScript support with type definitions included:
+Type definitions are included:
 
 ```typescript
-import { 
-  play, 
-  pause, 
-  listSessions, 
-  MediaSession, 
-  ControlResult 
-} from 'win-media-control';
+import { MediaSession, ControlResult } from 'win-media-control';
 
 const sessions: MediaSession[] = await listSessions();
 const result: ControlResult = await play('Spotify');
 ```
 
-### Type Definitions
+## How it works
 
-```typescript
-interface MediaSession {
-  appName: string;
-  title: string;
-  artist: string;
-  playbackStatus: string;
-}
+Uses Windows' System Media Transport Controls API via PowerShell. Works with any app that integrates with Windows media controls (Spotify, VLC, browsers, etc).
 
-interface ControlResult {
-  success: string[];
-  failed: Array<{
-    app: string;
-    reason: string;
-  }>;
-}
-```
+App names are resolved by checking the running process's FileDescription metadata.
 
-## How It Works
+### Firefox quirk
 
-This package uses Windows' **System Media Transport Controls** (SMTC) through PowerShell and the Windows Runtime APIs. Any app that integrates with Windows' media controls (the popup that appears when you press media keys) can be controlled.
+Firefox uses dynamic session IDs like `308046B0AF4A39CB` instead of a standard app identifier. When we see a cryptic ID that doesn't match a process, we check if Firefox is running.
 
-**Supported apps include:**
-- **Desktop apps:** Spotify, VLC Media Player, Windows Media Player, iTunes
-- **Browsers:** Chrome, Firefox, Edge, Opera, Brave (displays as "Google Chrome", "Firefox", "Microsoft Edge", etc.)
-- **Any app** that integrates with Windows Media Transport Controls
+### Issues
 
-The package uses the same name resolution as Windows' built-in media overlay.
+If an app doesn't work, open an issue with the app name and what `npx win-media-control list` shows.
 
-### Why Firefox Needs Special Handling
+## Troubleshooting
 
-Firefox generates dynamic session IDs (like `308046B0AF4A39CB`) for browser tabs playing media, rather than using a standard Windows Application User Model ID (AUMID). This is different from Chrome and Edge, which properly register their session IDs (`Chrome`, `MSEdge`).
+**No sessions found:** Make sure something is actually playing media.
 
-When we detect a cryptic session ID that doesn't match any running process, we check if Firefox is running and label it accordingly.
+**App not found:** Run `npx win-media-control list` to see available apps. Names are case-insensitive and partial matches work.
 
-### Found an App That Doesn't Work?
-
-If you encounter an application that doesn't appear in the session list or can't be controlled, please [create an issue](https://github.com/YOUR_USERNAME/win-media-control/issues) with:
-- The app name and version
-- What shows up when you run `npx win-media-control list`
-- Whether the app works with Windows' built-in media controls (media keys/overlay)
-
-This helps us improve detection for apps with non-standard session IDs!
-
-## Common Issues
-
-### "No active media sessions found"
-
-**Cause:** No apps are currently playing or paused media.
-
-**Solution:** Start playing media in any supported app first.
-
-### "Session not found for [app]"
-
-**Cause:** The app name doesn't match any active session.
-
-**Solutions:**
-1. Run `npx win-media-control list` to see exact app names
-2. Use partial names (e.g., "Spotify" matches "Spotify.exe")
-3. App names are case-insensitive
-
-### PowerShell execution errors
-
-**Cause:** PowerShell execution policies or permissions.
-
-**Solution:** Ensure PowerShell can execute scripts. Run PowerShell as administrator and execute:
+**PowerShell errors:** You might need to allow script execution:
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
@@ -305,8 +133,4 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
