@@ -8,6 +8,14 @@
   "bin": {
     "win-media-control": "./bin/win-media-control.js"
   },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "bin/",
+    "scripts/",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

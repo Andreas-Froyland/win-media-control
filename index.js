@@ -1,7 +1,12 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SCRIPTS_DIR = join(__dirname, 'scripts');
 
 const DEBUG = process.env.DEBUG === 'win-media-control';
 
@@ -15,17 +20,48 @@ function debug(...args) {
 }
 
 /**
- * Execute PowerShell command to control media
+ * Execute a PowerShell script file with arguments
  */
-async function executePowerShell(command) {
-  // Use PowerShell's -EncodedCommand to avoid escaping issues
-  const encodedCommand = Buffer.from(command, 'utf16le').toString('base64');
-  const fullCommand = `powershell.exe -NoProfile -EncodedCommand ${encodedCommand}`;
+async function executePowerShell(scriptName, params = {}) {
+  const scriptPath = join(SCRIPTS_DIR, scriptName);
   
-  debug('Executing PowerShell:', command);
+  // Check if we have array parameters - if so, use -Command instead of -File
+  const hasArrayParams = Object.values(params).some(v => Array.isArray(v));
+  
+  let command;
+  if (hasArrayParams) {
+    // Use -Command for proper array handling
+    const paramParts = [];
+    for (const [key, value] of Object.entries(params)) {
+      if (Array.isArray(value)) {
+        // Build PowerShell array syntax: @('val1','val2')
+        const arrayValues = value.map(v => `'${String(v).replace(/'/g, "''")}'`).join(',');
+        paramParts.push(`-${key} @(${arrayValues})`);
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        paramParts.push(`-${key} '${escaped}'`);
+      }
+    }
+    const paramsString = paramParts.join(' ');
+    command = `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& '${scriptPath.replace(/'/g, "''")}' ${paramsString}"`;
+  } else {
+    // Use -File for simpler execution without arrays
+    const paramParts = [];
+    for (const [key, value] of Object.entries(params)) {
+      const escaped = String(value).replace(/"/g, '`"');
+      if (escaped.includes(' ') || escaped.includes('&') || escaped.includes('|')) {
+        paramParts.push(`-${key} "${escaped}"`);
+      } else {
+        paramParts.push(`-${key} ${escaped}`);
+      }
+    }
+    command = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" ${paramParts.join(' ')}`;
+  }
+  
+  debug('Executing PowerShell script:', scriptName, params);
   
   try {
-    const { stdout, stderr } = await execAsync(fullCommand, {
+    const { stdout, stderr } = await execAsync(command, {
       windowsHide: true,
       timeout: 10000
     });
@@ -45,93 +81,8 @@ async function executePowerShell(command) {
  * Get all active media sessions
  */
 export async function listSessions() {
-  const script = `
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime;
-    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.ToString() -eq 'System.Threading.Tasks.Task\`1[TResult] AsTask[TResult](Windows.Foundation.IAsyncOperation\`1[TResult])' })[0];
-    
-    Function AwaitAction($WinRtAction) {
-      $asTask = $asTaskGeneric.MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]);
-      $netTask = $asTask.Invoke($null, @($WinRtAction));
-      $netTask.Wait() | Out-Null;
-      $netTask.Result;
-    }
-    
-    Function Get-ProcessName($appId) {
-      $appIdClean = $appId -replace '\\.exe$', '';
-      
-      try {
-        $processes = Get-Process -Name $appIdClean -ErrorAction SilentlyContinue;
-        if ($processes) {
-          $proc = $processes[0];
-          if ($proc.MainModule.FileVersionInfo.FileDescription) {
-            return $proc.MainModule.FileVersionInfo.FileDescription;
-          }
-          return $proc.ProcessName;
-        }
-      } catch {}
-      
-      if ($appId -match '\\.exe$') {
-        return $appIdClean;
-      }
-      
-      try {
-        $package = Get-AppxPackage | Where-Object { $_.PackageFamilyName -like "*$appId*" -or $_.Name -like "*$appId*" } | Select-Object -First 1;
-        if ($package -and $package.Name) {
-          return $package.Name;
-        }
-      } catch {}
-      
-      if ($appId -notmatch '\\.exe$') {
-        $firefoxProc = Get-Process -Name firefox -ErrorAction SilentlyContinue | Select-Object -First 1;
-        if ($firefoxProc) {
-          try {
-            if ($firefoxProc.MainModule.FileVersionInfo.FileDescription) {
-              return $firefoxProc.MainModule.FileVersionInfo.FileDescription;
-            }
-          } catch {}
-          return \"Firefox\";
-        }
-      }
-      
-      return $appId;
-    }
-    
-    [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media,ContentType=WindowsRuntime] | Out-Null;
-    $sessionManager = AwaitAction([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync());
-    $sessions = $sessionManager.GetSessions();
-    
-    $results = @();
-    foreach ($session in $sessions) {
-      $playback = $session.GetPlaybackInfo();
-      $appId = $session.SourceAppUserModelId;
-      $friendlyName = Get-ProcessName $appId;
-      
-      $result = @{
-        appName = $friendlyName;
-        appId = $appId;
-        title = '';
-        artist = '';
-        playbackStatus = $playback.PlaybackStatus.ToString();
-      };
-      
-      try {
-        $mediaPropsTask = $session.TryGetMediaPropertiesAsync();
-        $asTaskMedia = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.ToString() -match 'AsTask.*IAsyncOperation' })[0].MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsMediaProperties]);
-        $mediaTask = $asTaskMedia.Invoke($null, @($mediaPropsTask));
-        $mediaTask.Wait() | Out-Null;
-        $media = $mediaTask.Result;
-        $result.title = $media.Title;
-        $result.artist = $media.Artist;
-      } catch {}
-      
-      $results += $result;
-    }
-    
-    $results | ConvertTo-Json -Compress
-  `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
-
   try {
-    const output = await executePowerShell(script);
+    const output = await executePowerShell('list-sessions.ps1', {});
     
     if (!output || output === 'null' || output === '') {
       debug('No active media sessions found');
@@ -157,97 +108,80 @@ export async function listSessions() {
  * Control media playback for specific apps or all apps
  */
 async function controlMedia(apps, action) {
-  // If apps is "all", control all sessions
-  if (apps === "all") {
-    const sessions = await listSessions();
-    
-    if (sessions.length === 0) {
-      console.warn('Warning: No active media sessions found');
-      return { success: [], failed: [] };
-    }
-    
-    const appNames = sessions.map(s => s.appName);
-    debug(`${action} all sessions:`, appNames);
-    
-    return controlMedia(appNames, action);
-  }
-  
   // Normalize input to array
-  const appList = Array.isArray(apps) ? apps : [apps];
+  const appList = apps === "all" ? null : (Array.isArray(apps) ? apps : [apps]);
   
-  debug(`Attempting to ${action}:`, appList);
+  debug(`Attempting to ${action}:`, apps === "all" ? "all sessions" : appList);
   
   const result = {
     success: [],
     failed: []
   };
   
-  // Get all active sessions
-  const sessions = await listSessions();
-  
-  if (sessions.length === 0) {
-    for (const app of appList) {
-      console.warn(`Warning: No active media sessions found for "${app}"`);
-      result.failed.push({ app, reason: 'No active media sessions' });
-    }
-    return result;
-  }
-  
-  for (const app of appList) {
-    // Find matching session (case-insensitive partial match against both friendly name and appId)
-    const matchingSession = sessions.find(session => 
-      session.appName.toLowerCase().includes(app.toLowerCase()) ||
-      session.appId.toLowerCase().includes(app.toLowerCase())
-    );
-    
-    if (!matchingSession) {
-      console.warn(`Warning: No media session found for "${app}". Available apps: ${sessions.map(s => s.appName).join(', ')}`);
-      result.failed.push({ app, reason: 'Session not found' });
-      continue;
+  try {
+    // Build parameters for PowerShell script
+    const params = { Action: action };
+    if (appList) {
+      params.SearchPatterns = appList;
     }
     
-    try {
-      // Use the actual appId for the PowerShell command
-      const targetAppId = matchingSession.appId;
-      
-      const script = `
-        Add-Type -AssemblyName System.Runtime.WindowsRuntime;
-        $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.ToString() -eq 'System.Threading.Tasks.Task\`1[TResult] AsTask[TResult](Windows.Foundation.IAsyncOperation\`1[TResult])' })[0];
-        
-        Function AwaitAction($WinRtAction) {
-          $asTask = $asTaskGeneric.MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]);
-          $netTask = $asTask.Invoke($null, @($WinRtAction));
-          $netTask.Wait() | Out-Null;
-          $netTask.Result;
+    const output = await executePowerShell('control-media.ps1', params);
+    
+    if (!output || output === 'null' || output === '') {
+      console.warn('Warning: No active media sessions found');
+      if (appList) {
+        for (const app of appList) {
+          result.failed.push({ app, reason: 'No active media sessions' });
         }
+      }
+      return result;
+    }
+    
+    const psResult = JSON.parse(output);
+    
+    // Mark controlled apps as successful
+    if (psResult.controlled && psResult.controlled.length > 0) {
+      const controlled = Array.isArray(psResult.controlled) ? psResult.controlled : [psResult.controlled];
+      result.success.push(...controlled);
+      controlled.forEach(app => debug(`Successfully ${action.toLowerCase()}ed:`, app));
+    }
+    
+    // Mark apps that weren't found
+    if (psResult.notFound && psResult.notFound.length > 0) {
+      const notFound = Array.isArray(psResult.notFound) ? psResult.notFound : [psResult.notFound];
+      const available = Array.isArray(psResult.available) ? psResult.available : [psResult.available];
+      notFound.forEach(app => {
+        console.warn(`Warning: No media session found for "${app}". Available apps: ${available.join(', ')}`);
+        result.failed.push({ app, reason: 'Session not found' });
+      });
+    }
+    
+    // Handle apps that were found but failed to control
+    if (appList) {
+      for (const app of appList) {
+        const wasControlled = result.success.some(name => 
+          name.toLowerCase().includes(app.toLowerCase())
+        );
+        const wasNotFound = psResult.notFound && 
+          (Array.isArray(psResult.notFound) ? psResult.notFound : [psResult.notFound])
+            .includes(app.toLowerCase());
         
-        Function AwaitBool($WinRtAction) {
-          $asTask = $asTaskGeneric.MakeGenericMethod([bool]);
-          $netTask = $asTask.Invoke($null, @($WinRtAction));
-          $netTask.Wait() | Out-Null;
-          $netTask.Result;
+        if (!wasControlled && !wasNotFound) {
+          console.warn(`Warning: Failed to ${action.toLowerCase()} "${app}"`);
+          result.failed.push({ app, reason: 'Control command failed' });
         }
-        
-        [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media,ContentType=WindowsRuntime] | Out-Null;
-        $sessionManager = AwaitAction([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync());
-        $sessions = $sessionManager.GetSessions();
-        
-        foreach ($session in $sessions) {
-          if ($session.SourceAppUserModelId -eq "${targetAppId}") {
-            $actionTask = $session.Try${action}Async();
-            AwaitBool $actionTask | Out-Null;
-            Write-Output "Success";
-            break;
-          }
-        }
-      `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
-      
-      await executePowerShell(script);
-      debug(`Successfully ${action.toLowerCase()}ed:`, matchingSession.appName);
-      result.success.push(matchingSession.appName);
-    } catch (error) {
-      console.warn(`Warning: Failed to ${action.toLowerCase()} "${app}": ${error.message}`);
-      result.failed.push({ app, reason: error.message });
+      }
+    }
+    
+  } catch (error) {
+    debug('Control script failed:', error.message);
+    if (appList) {
+      for (const app of appList) {
+        console.warn(`Warning: Failed to ${action.toLowerCase()} "${app}": ${error.message}`);
+        result.failed.push({ app, reason: error.message });
+      }
+    } else {
+      console.warn(`Warning: Failed to ${action.toLowerCase()} all sessions: ${error.message}`);
     }
   }
   
@@ -332,43 +266,8 @@ export async function togglePlayPause(apps) {
 async function controlCurrentSession(action) {
   debug(`Controlling current session with action: ${action}`);
   
-  const script = `
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime;
-    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.ToString() -eq 'System.Threading.Tasks.Task\`1[TResult] AsTask[TResult](Windows.Foundation.IAsyncOperation\`1[TResult])' })[0];
-    
-    Function AwaitAction($WinRtAction) {
-      $asTask = $asTaskGeneric.MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]);
-      $netTask = $asTask.Invoke($null, @($WinRtAction));
-      $netTask.Wait() | Out-Null;
-      $netTask.Result;
-    }
-    
-    Function AwaitBool($WinRtAction) {
-      $asTask = $asTaskGeneric.MakeGenericMethod([bool]);
-      $netTask = $asTask.Invoke($null, @($WinRtAction));
-      $netTask.Wait() | Out-Null;
-      $netTask.Result;
-    }
-    
-    [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media,ContentType=WindowsRuntime] | Out-Null;
-    $sessionManager = AwaitAction([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync());
-    $currentSession = $sessionManager.GetCurrentSession();
-    
-    if ($currentSession) {
-      $actionTask = $currentSession.Try${action}Async();
-      $result = AwaitBool $actionTask;
-      if ($result) {
-        Write-Output "Success: Controlled current session";
-      } else {
-        Write-Error "Failed: Action not supported by current session";
-      }
-    } else {
-      Write-Error "No current session available";
-    }
-  `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
-  
   try {
-    await executePowerShell(script);
+    await executePowerShell('control-current.ps1', { Action: action });
     return { success: ['Current Session'], failed: [] };
   } catch (error) {
     debug(`Failed to control current session, falling back to SendKeys:`, error.message);
@@ -383,29 +282,8 @@ async function controlCurrentSession(action) {
 async function simulateMediaKeyWithSendKeys(action) {
   debug(`Simulating media key for action: ${action} using SendKeys`);
   
-  // Map actions to SendKeys codes
-  const keyMap = {
-    'Play': '{MEDIA_PLAY_PAUSE}',
-    'Pause': '{MEDIA_PLAY_PAUSE}',
-    'TogglePlayPause': '{MEDIA_PLAY_PAUSE}',
-    'SkipNext': '{MEDIA_NEXT_TRACK}',
-    'SkipPrevious': '{MEDIA_PREV_TRACK}',
-    'Stop': '{MEDIA_STOP}'
-  };
-  
-  const sendKeyCode = keyMap[action];
-  if (!sendKeyCode) {
-    return { success: [], failed: [{ app: 'MediaKey', reason: 'Unknown action' }] };
-  }
-  
-  const script = `
-    Add-Type -AssemblyName System.Windows.Forms;
-    [System.Windows.Forms.SendKeys]::SendWait('${sendKeyCode}');
-    Write-Output "Sent ${sendKeyCode}";
-  `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
-  
   try {
-    await executePowerShell(script);
+    await executePowerShell('simulate-media-key.ps1', { Action: action });
     return { success: [action], failed: [] };
   } catch (error) {
     debug(`Failed to simulate media key:`, error.message);
