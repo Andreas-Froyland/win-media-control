@@ -20,10 +20,13 @@ foreach ($session in $sessions) {
     }
     
     try {
+        # Load the media properties type
+        [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties,Windows.Media,ContentType=WindowsRuntime] | Out-Null
+        
         $mediaPropsTask = $session.TryGetMediaPropertiesAsync()
         $asTaskMedia = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { 
             $_.ToString() -match 'AsTask.*IAsyncOperation' 
-        })[0].MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsMediaProperties])
+        })[0].MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
         $mediaTask = $asTaskMedia.Invoke($null, @($mediaPropsTask))
         $mediaTask.Wait() | Out-Null
         $media = $mediaTask.Result
