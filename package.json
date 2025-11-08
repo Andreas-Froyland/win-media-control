@@ -1,6 +1,6 @@
 {
   "name": "win-media-control",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Control Windows media playback using PowerShell commands",
   "main": "index.js",
   "type": "module",
