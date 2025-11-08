@@ -17,7 +17,9 @@
     "README.md"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:validate && npm run test:types-check",
+    "test:validate": "node test/validate-package.test.js && node test/validate-types.test.js",
+    "test:types-check": "tsc --noEmit"
   },
   "keywords": [
     "windows",
@@ -40,6 +42,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Andreas-Froyland/win-media-control.git"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
   }
 }
 
