@@ -18,9 +18,10 @@ function debug(...args) {
  * Execute PowerShell command to control media
  */
 async function executePowerShell(command) {
-  // Escape double quotes for PowerShell
-  const escapedCommand = command.replace(/"/g, '\\"');
-  const fullCommand = `powershell.exe -NoProfile -Command "${escapedCommand}"`;
+  // Use PowerShell's -EncodedCommand to avoid escaping issues
+  const encodedCommand = Buffer.from(command, 'utf16le').toString('base64');
+  const fullCommand = `powershell.exe -NoProfile -EncodedCommand ${encodedCommand}`;
+  
   debug('Executing PowerShell:', command);
   
   try {
@@ -156,8 +157,8 @@ export async function listSessions() {
  * Control media playback for specific apps or all apps
  */
 async function controlMedia(apps, action) {
-  // If apps is undefined, control all sessions
-  if (apps === undefined) {
+  // If apps is "all", control all sessions
+  if (apps === "all") {
     const sessions = await listSessions();
     
     if (sessions.length === 0) {
@@ -254,102 +255,160 @@ async function controlMedia(apps, action) {
 }
 
 /**
- * Play media for specified app(s) or all active sessions
- * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls all active sessions.
+ * Play media for specified app(s), all sessions, or control current session
+ * @param {string|string[]} [apps] - App name, array of app names, or "all" for all sessions. If omitted, controls current session.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function play(apps) {
+  if (apps === undefined) {
+    return controlCurrentSession('Play');
+  }
   return controlMedia(apps, 'Play');
 }
 
 /**
- * Pause media for specified app(s) or all active sessions
- * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls all active sessions.
+ * Pause media for specified app(s), all sessions, or control current session
+ * @param {string|string[]} [apps] - App name, array of app names, or "all" for all sessions. If omitted, controls current session.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function pause(apps) {
+  if (apps === undefined) {
+    return controlCurrentSession('Pause');
+  }
   return controlMedia(apps, 'Pause');
 }
 
 /**
- * Skip to next track for specified app(s) or simulate media keyboard key
- * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Next Track keyboard key.
+ * Skip to next track for specified app(s) or control current session
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls current session.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function next(apps) {
   if (apps === undefined) {
-    return simulateMediaKey('Next Track', 0xB0);
+    return controlCurrentSession('SkipNext');
   }
   return controlMedia(apps, 'SkipNext');
 }
 
 /**
- * Skip to previous track for specified app(s) or simulate media keyboard key
- * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Previous Track keyboard key.
+ * Skip to previous track for specified app(s) or control current session
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls current session.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function previous(apps) {
   if (apps === undefined) {
-    return simulateMediaKey('Previous Track', 0xB1);
+    return controlCurrentSession('SkipPrevious');
   }
   return controlMedia(apps, 'SkipPrevious');
 }
 
 /**
- * Stop playback for specified app(s) or simulate media keyboard key
- * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Stop keyboard key.
+ * Stop playback for specified app(s) or control current session
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls current session.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function stop(apps) {
   if (apps === undefined) {
-    return simulateMediaKey('Stop', 0xB2);
+    return controlCurrentSession('Stop');
   }
   return controlMedia(apps, 'Stop');
 }
 
 /**
- * Toggle play/pause for specified app(s) or simulate media keyboard key
- * @param {string|string[]} [apps] - App name or array of app names. If omitted, simulates Play/Pause Toggle keyboard key.
+ * Toggle play/pause for specified app(s) or control current session
+ * @param {string|string[]} [apps] - App name or array of app names. If omitted, controls current session.
  * @returns {Promise<{success: string[], failed: Array<{app: string, reason: string}>}>}
  */
 export async function togglePlayPause(apps) {
   if (apps === undefined) {
-    return simulateMediaKey('Play/Pause Toggle', 0xB3);
+    return controlCurrentSession('TogglePlayPause');
   }
   return controlMedia(apps, 'TogglePlayPause');
 }
 
 /**
- * Simulate media key press via PowerShell
+ * Control the current/default media session
  */
-async function simulateMediaKey(keyName, keyCode) {
-  debug(`Simulating ${keyName} media key press`);
+async function controlCurrentSession(action) {
+  debug(`Controlling current session with action: ${action}`);
   
   const script = `
-    Add-Type -TypeDefinition @"
-    using System.Runtime.InteropServices;
-    public class MediaControl {
-      [DllImport("user32.dll")]
-      private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, System.UIntPtr dwExtraInfo);
-      
-      private const uint KEYEVENTF_EXTENDEDKEY = 0x1;
-      private const uint KEYEVENTF_KEYUP = 0x2;
-      
-      public static void PressKey(byte vkCode) {
-        keybd_event(vkCode, 0, KEYEVENTF_EXTENDEDKEY, System.UIntPtr.Zero);
-        keybd_event(vkCode, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, System.UIntPtr.Zero);
-      }
-    }
-"@ -Language CSharp
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime;
+    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.ToString() -eq 'System.Threading.Tasks.Task\`1[TResult] AsTask[TResult](Windows.Foundation.IAsyncOperation\`1[TResult])' })[0];
     
-    [MediaControl]::PressKey(${keyCode})
+    Function AwaitAction($WinRtAction) {
+      $asTask = $asTaskGeneric.MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]);
+      $netTask = $asTask.Invoke($null, @($WinRtAction));
+      $netTask.Wait() | Out-Null;
+      $netTask.Result;
+    }
+    
+    Function AwaitBool($WinRtAction) {
+      $asTask = $asTaskGeneric.MakeGenericMethod([bool]);
+      $netTask = $asTask.Invoke($null, @($WinRtAction));
+      $netTask.Wait() | Out-Null;
+      $netTask.Result;
+    }
+    
+    [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media,ContentType=WindowsRuntime] | Out-Null;
+    $sessionManager = AwaitAction([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync());
+    $currentSession = $sessionManager.GetCurrentSession();
+    
+    if ($currentSession) {
+      $actionTask = $currentSession.Try${action}Async();
+      $result = AwaitBool $actionTask;
+      if ($result) {
+        Write-Output "Success: Controlled current session";
+      } else {
+        Write-Error "Failed: Action not supported by current session";
+      }
+    } else {
+      Write-Error "No current session available";
+    }
   `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
   
   try {
     await executePowerShell(script);
-    return { success: [keyName], failed: [] };
+    return { success: ['Current Session'], failed: [] };
   } catch (error) {
-    debug(`Failed to simulate ${keyName} key:`, error.message);
+    debug(`Failed to control current session, falling back to SendKeys:`, error.message);
+    // Fallback to SendKeys method
+    return simulateMediaKeyWithSendKeys(action);
+  }
+}
+
+/**
+ * Simulate media key press using SendKeys via PowerShell
+ */
+async function simulateMediaKeyWithSendKeys(action) {
+  debug(`Simulating media key for action: ${action} using SendKeys`);
+  
+  // Map actions to SendKeys codes
+  const keyMap = {
+    'Play': '{MEDIA_PLAY_PAUSE}',
+    'Pause': '{MEDIA_PLAY_PAUSE}',
+    'TogglePlayPause': '{MEDIA_PLAY_PAUSE}',
+    'SkipNext': '{MEDIA_NEXT_TRACK}',
+    'SkipPrevious': '{MEDIA_PREV_TRACK}',
+    'Stop': '{MEDIA_STOP}'
+  };
+  
+  const sendKeyCode = keyMap[action];
+  if (!sendKeyCode) {
+    return { success: [], failed: [{ app: 'MediaKey', reason: 'Unknown action' }] };
+  }
+  
+  const script = `
+    Add-Type -AssemblyName System.Windows.Forms;
+    [System.Windows.Forms.SendKeys]::SendWait('${sendKeyCode}');
+    Write-Output "Sent ${sendKeyCode}";
+  `.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+  
+  try {
+    await executePowerShell(script);
+    return { success: [action], failed: [] };
+  } catch (error) {
+    debug(`Failed to simulate media key:`, error.message);
     return { success: [], failed: [{ app: 'MediaKey', reason: error.message }] };
   }
 }

@@ -63,18 +63,22 @@ await togglePlayPause('Firefox');
 await play(['Spotify', 'Firefox']);
 await next(['Spotify', 'Chrome']);
 
-// Omit app parameter to control all sessions or simulate keyboard keys
-await play();         // Play all active sessions
-await pause();        // Pause all active sessions
-await next();         // Simulate Next Track keyboard key (Windows decides which session)
-await previous();     // Simulate Previous Track keyboard key
-await stop();         // Simulate Stop keyboard key
-await togglePlayPause(); // Simulate Play/Pause Toggle keyboard key
+// Control all sessions (use "all")
+await play('all');
+await pause('all');
+
+// Control current session (omit parameter)
+await play();         // Control current session
+await pause();        // Control current session
+await next();         // Control current session
+await previous();     // Control current session
+await stop();         // Control current session
+await togglePlayPause(); // Toggle current session
 ```
 
-When you call `next()`, `previous()`, `stop()`, or `togglePlayPause()` without arguments, they simulate pressing media keyboard keys. Windows decides which session to control (typically the most recently active one). This matches the behavior of physical multimedia keyboards.
+When you call functions without arguments, they control the current/focused media session directly through Windows' GlobalSystemMediaTransportControls API. This is more reliable than simulating keyboard input. If no current session is available, it automatically falls back to using SendKeys to simulate media key presses.
 
-When you call `play()` or `pause()` without arguments, they control all active sessions.
+Use `"all"` to explicitly control all active sessions.
 
 Functions return a result object with `success` and `failed` arrays:
 
@@ -95,7 +99,12 @@ npx win-media-control play Spotify
 npx win-media-control pause Firefox Chrome
 npx win-media-control next Spotify
 
-# Control all sessions (play/pause) or simulate keyboard keys (next/previous/stop/toggle)
+# Control all sessions
+npx win-media-control play all
+npx win-media-control pause all
+
+# Control current session (omit app parameter)
+npx win-media-control play
 npx win-media-control pause
 npx win-media-control next
 npx win-media-control toggle
@@ -125,20 +134,27 @@ node your-script.js
 Type definitions are included:
 
 ```typescript
-import { MediaSession, ControlResult, next } from 'win-media-control';
+import { MediaSession, ControlResult, play, next } from 'win-media-control';
 
 const sessions: MediaSession[] = await listSessions();
 
 // Control specific app
 const result: ControlResult = await next('Spotify');
 
-// Simulate keyboard key
+// Control all sessions
+await play('all');
+
+// Control current session
 await next();
 ```
 
 ## How it works
 
-Uses Windows' System Media Transport Controls API via PowerShell. Works with any app that integrates with Windows media controls (Spotify, VLC, browsers, etc).
+Uses Windows' GlobalSystemMediaTransportControls API via PowerShell. Works with any app that integrates with Windows media controls (Spotify, VLC, browsers, etc).
+
+When controlling specific apps, the library finds the matching session by app name and sends control commands directly to that session.
+
+When no app is specified, the library uses `GetCurrentSession()` to control the currently focused media session. This is the most reliable method. If that fails (e.g., no current session), it falls back to using `System.Windows.Forms.SendKeys` to simulate media key presses (`MEDIA_PLAY_PAUSE`, `MEDIA_NEXT_TRACK`, etc.).
 
 App names are resolved by checking the running process's FileDescription metadata.
 

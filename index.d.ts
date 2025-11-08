@@ -40,8 +40,8 @@ export interface ControlResult {
 export function listSessions(): Promise<MediaSession[]>;
 
 /**
- * Play media for specified app(s) or all active sessions
- * @param apps - A single app name as a string or an array of app names. If omitted, controls all active sessions.
+ * Play media for specified app(s), all sessions, or control current session
+ * @param apps - A single app name, array of app names, or "all" for all sessions. If omitted, controls the current/focused media session.
  * @returns A promise that resolves to a result object indicating success/failure for each app
  * @example
  * ```typescript
@@ -52,14 +52,17 @@ export function listSessions(): Promise<MediaSession[]>;
  * await play(['Spotify', 'Firefox']);
  * 
  * // All sessions
+ * await play('all');
+ * 
+ * // Control current session
  * await play();
  * ```
  */
 export function play(apps?: string | string[]): Promise<ControlResult>;
 
 /**
- * Pause media for specified app(s) or all active sessions
- * @param apps - A single app name as a string or an array of app names. If omitted, controls all active sessions.
+ * Pause media for specified app(s), all sessions, or control current session
+ * @param apps - A single app name, array of app names, or "all" for all sessions. If omitted, controls the current/focused media session.
  * @returns A promise that resolves to a result object indicating success/failure for each app
  * @example
  * ```typescript
@@ -70,14 +73,17 @@ export function play(apps?: string | string[]): Promise<ControlResult>;
  * await pause(['Spotify', 'Chrome']);
  * 
  * // All sessions
+ * await pause('all');
+ * 
+ * // Control current session
  * await pause();
  * ```
  */
 export function pause(apps?: string | string[]): Promise<ControlResult>;
 
 /**
- * Skip to next track for specified app(s) or simulate media keyboard key
- * @param apps - A single app name as a string or an array of app names. If omitted, simulates Next Track keyboard key (Windows decides which session to control).
+ * Skip to next track for specified app(s) or control current session
+ * @param apps - A single app name as a string or an array of app names. If omitted, controls the current/focused media session.
  * @returns A promise that resolves to a result object indicating success/failure for each app
  * @example
  * ```typescript
@@ -87,15 +93,15 @@ export function pause(apps?: string | string[]): Promise<ControlResult>;
  * // Multiple apps
  * await next(['Spotify', 'Firefox']);
  * 
- * // Simulate keyboard key
+ * // Control current session
  * await next();
  * ```
  */
 export function next(apps?: string | string[]): Promise<ControlResult>;
 
 /**
- * Skip to previous track for specified app(s) or simulate media keyboard key
- * @param apps - A single app name as a string or an array of app names. If omitted, simulates Previous Track keyboard key (Windows decides which session to control).
+ * Skip to previous track for specified app(s) or control current session
+ * @param apps - A single app name as a string or an array of app names. If omitted, controls the current/focused media session.
  * @returns A promise that resolves to a result object indicating success/failure for each app
  * @example
  * ```typescript
@@ -105,15 +111,15 @@ export function next(apps?: string | string[]): Promise<ControlResult>;
  * // Multiple apps
  * await previous(['Spotify', 'Firefox']);
  * 
- * // Simulate keyboard key
+ * // Control current session
  * await previous();
  * ```
  */
 export function previous(apps?: string | string[]): Promise<ControlResult>;
 
 /**
- * Stop playback for specified app(s) or simulate media keyboard key
- * @param apps - A single app name as a string or an array of app names. If omitted, simulates Stop keyboard key (Windows decides which session to control).
+ * Stop playback for specified app(s) or control current session
+ * @param apps - A single app name as a string or an array of app names. If omitted, controls the current/focused media session.
  * @returns A promise that resolves to a result object indicating success/failure for each app
  * @example
  * ```typescript
@@ -123,15 +129,15 @@ export function previous(apps?: string | string[]): Promise<ControlResult>;
  * // Multiple apps
  * await stop(['Spotify', 'Chrome']);
  * 
- * // Simulate keyboard key
+ * // Control current session
  * await stop();
  * ```
  */
 export function stop(apps?: string | string[]): Promise<ControlResult>;
 
 /**
- * Toggle play/pause for specified app(s) or simulate media keyboard key
- * @param apps - A single app name as a string or an array of app names. If omitted, simulates Play/Pause Toggle keyboard key (Windows decides which session to control).
+ * Toggle play/pause for specified app(s) or control current session
+ * @param apps - A single app name as a string or an array of app names. If omitted, controls the current/focused media session.
  * @returns A promise that resolves to a result object indicating success/failure for each app
  * @example
  * ```typescript
@@ -141,7 +147,7 @@ export function stop(apps?: string | string[]): Promise<ControlResult>;
  * // Multiple apps
  * await togglePlayPause(['Spotify', 'Firefox']);
  * 
- * // Simulate keyboard key
+ * // Control current session
  * await togglePlayPause();
  * ```
  */
