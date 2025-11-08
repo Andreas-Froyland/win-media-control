@@ -22,4 +22,3 @@ if ($null -eq $sendKeyCode) {
 
 [System.Windows.Forms.SendKeys]::SendWait($sendKeyCode)
 Write-Output "Sent $sendKeyCode"
-

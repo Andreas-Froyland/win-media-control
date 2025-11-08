@@ -3,25 +3,8 @@ param(
     [string]$Action
 )
 
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-
-$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { 
-    $_.ToString() -eq 'System.Threading.Tasks.Task`1[TResult] AsTask[TResult](Windows.Foundation.IAsyncOperation`1[TResult])' 
-})[0]
-
-Function AwaitAction($WinRtAction) {
-    $asTask = $asTaskGeneric.MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-    $netTask = $asTask.Invoke($null, @($WinRtAction))
-    $netTask.Wait() | Out-Null
-    $netTask.Result
-}
-
-Function AwaitBool($WinRtAction) {
-    $asTask = $asTaskGeneric.MakeGenericMethod([bool])
-    $netTask = $asTask.Invoke($null, @($WinRtAction))
-    $netTask.Wait() | Out-Null
-    $netTask.Result
-}
+# Import common functions
+. "$PSScriptRoot\common.ps1"
 
 [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media,ContentType=WindowsRuntime] | Out-Null
 $sessionManager = AwaitAction([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync())
@@ -38,4 +21,3 @@ if ($currentSession) {
 } else {
     Write-Error "No current session"
 }
-

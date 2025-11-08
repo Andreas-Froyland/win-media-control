@@ -1,13 +1,8 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const SCRIPTS_DIR = join(__dirname, 'scripts');
-
 const DEBUG = process.env.DEBUG === 'win-media-control';
 
 /**
@@ -23,7 +18,8 @@ function debug(...args) {
  * Execute a PowerShell script file with arguments
  */
 async function executePowerShell(scriptName, params = {}) {
-  const scriptPath = join(SCRIPTS_DIR, scriptName);
+  // Get absolute path to script relative to this module
+  const scriptPath = fileURLToPath(new URL(`./scripts/${scriptName}`, import.meta.url));
   
   // Check if we have array parameters - if so, use -Command instead of -File
   const hasArrayParams = Object.values(params).some(v => Array.isArray(v));
@@ -78,24 +74,25 @@ async function executePowerShell(scriptName, params = {}) {
 }
 
 /**
+ * Ensure value is an array
+ */
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [value];
+}
+
+/**
  * Get all active media sessions
  */
 export async function listSessions() {
   try {
-    const output = await executePowerShell('list-sessions.ps1', {});
+    const output = await executePowerShell('list-sessions.ps1');
     
     if (!output || output === 'null' || output === '') {
       debug('No active media sessions found');
       return [];
     }
     
-    let sessions = JSON.parse(output);
-    
-    // PowerShell returns single object instead of array when there's only one result
-    if (!Array.isArray(sessions)) {
-      sessions = [sessions];
-    }
-    
+    const sessions = ensureArray(JSON.parse(output));
     debug('Found sessions:', sessions);
     return sessions;
   } catch (error) {
@@ -141,15 +138,15 @@ async function controlMedia(apps, action) {
     
     // Mark controlled apps as successful
     if (psResult.controlled && psResult.controlled.length > 0) {
-      const controlled = Array.isArray(psResult.controlled) ? psResult.controlled : [psResult.controlled];
+      const controlled = ensureArray(psResult.controlled);
       result.success.push(...controlled);
       controlled.forEach(app => debug(`Successfully ${action.toLowerCase()}ed:`, app));
     }
     
     // Mark apps that weren't found
     if (psResult.notFound && psResult.notFound.length > 0) {
-      const notFound = Array.isArray(psResult.notFound) ? psResult.notFound : [psResult.notFound];
-      const available = Array.isArray(psResult.available) ? psResult.available : [psResult.available];
+      const notFound = ensureArray(psResult.notFound);
+      const available = ensureArray(psResult.available);
       notFound.forEach(app => {
         console.warn(`Warning: No media session found for "${app}". Available apps: ${available.join(', ')}`);
         result.failed.push({ app, reason: 'Session not found' });
@@ -163,8 +160,7 @@ async function controlMedia(apps, action) {
           name.toLowerCase().includes(app.toLowerCase())
         );
         const wasNotFound = psResult.notFound && 
-          (Array.isArray(psResult.notFound) ? psResult.notFound : [psResult.notFound])
-            .includes(app.toLowerCase());
+          ensureArray(psResult.notFound).includes(app.toLowerCase());
         
         if (!wasControlled && !wasNotFound) {
           console.warn(`Warning: Failed to ${action.toLowerCase()} "${app}"`);
@@ -290,5 +286,3 @@ async function simulateMediaKeyWithSendKeys(action) {
     return { success: [], failed: [{ app: 'MediaKey', reason: error.message }] };
   }
 }
-
-
