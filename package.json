@@ -29,7 +29,7 @@
     "firefox",
     "powershell"
   ],
-  "author": "",
+  "author": "Andreas Froyland",
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"
@@ -39,7 +39,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/Andreas-Froyland/win-media-control.git"
   }
 }
 
