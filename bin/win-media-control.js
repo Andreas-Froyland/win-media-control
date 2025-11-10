@@ -88,13 +88,33 @@ function displaySessions(sessions) {
   
   sessions.forEach((session, index) => {
     console.log(`${colors.cyan}${index + 1}.${colors.reset} ${colors.bright}${session.appName}${colors.reset}`);
+    
     if (session.title) {
-      console.log(`   Title:  ${session.title}`);
+      console.log(`   Title:        ${session.title}`);
     }
     if (session.artist) {
-      console.log(`   Artist: ${session.artist}`);
+      console.log(`   Artist:       ${session.artist}`);
     }
-    console.log(`   Status: ${session.playbackStatus === 'Playing' ? colors.green : colors.gray}${session.playbackStatus}${colors.reset}`);
+    if (session.albumTitle) {
+      console.log(`   Album:        ${session.albumTitle}`);
+    }
+    if (session.albumArtist && session.albumArtist !== session.artist) {
+      console.log(`   Album Artist: ${session.albumArtist}`);
+    }
+    if (session.trackNumber > 0) {
+      const trackInfo = session.albumTrackCount > 0 
+        ? `${session.trackNumber} / ${session.albumTrackCount}`
+        : `${session.trackNumber}`;
+      console.log(`   Track:        ${trackInfo}`);
+    }
+    if (session.subtitle) {
+      console.log(`   Subtitle:     ${session.subtitle}`);
+    }
+    if (session.playbackType) {
+      console.log(`   Type:         ${session.playbackType}`);
+    }
+    
+    console.log(`   Status:       ${session.playbackStatus === 'Playing' ? colors.green : colors.gray}${session.playbackStatus}${colors.reset}`);
     console.log();
   });
 }

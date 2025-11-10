@@ -16,6 +16,12 @@ foreach ($session in $sessions) {
         appId = $appId
         title = ''
         artist = ''
+        albumTitle = ''
+        albumArtist = ''
+        albumTrackCount = 0
+        trackNumber = 0
+        subtitle = ''
+        playbackType = ''
         playbackStatus = $playback.PlaybackStatus.ToString()
     }
     
@@ -32,6 +38,12 @@ foreach ($session in $sessions) {
         $media = $mediaTask.Result
         $result.title = $media.Title
         $result.artist = $media.Artist
+        $result.albumTitle = $media.AlbumTitle
+        $result.albumArtist = $media.AlbumArtist
+        $result.albumTrackCount = $media.AlbumTrackCount
+        $result.trackNumber = $media.TrackNumber
+        $result.subtitle = $media.Subtitle
+        $result.playbackType = $media.PlaybackType.ToString()
     } catch {}
     
     $results += $result
