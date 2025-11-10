@@ -23,6 +23,7 @@ Function AwaitBool($WinRtAction) {
 Function Get-ProcessName($appId) {
     $appIdClean = $appId -replace '\.exe$', ''
     
+    # Try to get process by exact appId match (for .exe processes)
     try {
         $processes = Get-Process -Name $appIdClean -ErrorAction SilentlyContinue
         if ($processes) {
@@ -38,6 +39,7 @@ Function Get-ProcessName($appId) {
         return $appIdClean
     }
     
+    # Try to get UWP package info
     try {
         $package = Get-AppxPackage | Where-Object { 
             $_.PackageFamilyName -like "*$appId*" -or $_.Name -like "*$appId*" 
@@ -47,7 +49,38 @@ Function Get-ProcessName($appId) {
         }
     } catch {}
     
-    if ($appId -notmatch '\.exe$') {
+    # Try to extract process name from appId patterns like "CompanyName.AppName_xxx!ProcessName"
+    # Examples: "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify" -> "Spotify"
+    if ($appId -match '!(.+)$') {
+        $processName = $matches[1]
+        try {
+            $proc = Get-Process -Name $processName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($proc) {
+                if ($proc.MainModule.FileVersionInfo.FileDescription) {
+                    return $proc.MainModule.FileVersionInfo.FileDescription
+                }
+                return $proc.ProcessName
+            }
+        } catch {}
+    }
+    
+    # Try to extract from "CompanyName.AppName_xxx" pattern
+    if ($appId -match '^[^.]+\.([^_]+)') {
+        $appName = $matches[1]
+        try {
+            $proc = Get-Process -Name $appName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($proc) {
+                if ($proc.MainModule.FileVersionInfo.FileDescription) {
+                    return $proc.MainModule.FileVersionInfo.FileDescription
+                }
+                return $proc.ProcessName
+            }
+        } catch {}
+    }
+    
+    # Firefox fallback: Firefox uses session IDs that don't match any useful pattern
+    # Only use this as last resort for unidentifiable appIds
+    if ($appId -notmatch '\.exe$' -and $appId -notmatch '^[A-Za-z]+\.[A-Za-z]+') {
         $firefoxProc = Get-Process -Name firefox -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($firefoxProc) {
             try {
@@ -59,6 +92,7 @@ Function Get-ProcessName($appId) {
         }
     }
     
+    # Return the appId itself if we couldn't find a friendly name
     return $appId
 }
 
